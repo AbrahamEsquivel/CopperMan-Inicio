@@ -6,15 +6,19 @@ const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
+    parent: 'app',
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 700 },
-            debug: true 
+            gravity: { y: 300 },
+            debug: false
         }
     },
-
-    scene: [GameScene] 
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    scene: [GameScene]
 };
 
-const game = new Phaser.Game(config);
+export default new Phaser.Game(config);

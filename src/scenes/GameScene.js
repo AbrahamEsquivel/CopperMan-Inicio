@@ -8,7 +8,7 @@ export class GameScene extends Phaser.Scene {
     preload() {
         this.load.atlas('soldado', 'assets/soldado.png', 'assets/soldado.json');
         
-        // Crear textura para la bala
+        // Textura de la bala
         let graphics = this.make.graphics({x: 0, y: 0, add: false});
         graphics.fillStyle(0xffff00, 1);
         graphics.fillRect(0, 0, 10, 4);
@@ -16,32 +16,62 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Configuración inicial de velocidades
+        // Configuración inicial
         this.velocidadBala = 900;
-        this.velocidadCaminar = 100; // Velocidad al caminar
-        this.velocidadCorrer = 250;  // Velocidad al correr
+        this.velocidadCaminar = 100;
+        this.velocidadCorrer = 250;
         
-        // Sistema de stamina
         this.maxStamina = 100;
         this.stamina = 100;
         this.costoSalto = 20;
-        this.costoCorrer = 0.5; // Consumo de stamina al correr
-        
-        // Crear barra de stamina en la interfaz
+        this.costoCorrer = 0.5;
+
+        this.municionMax = 30;
+        this.municionActual = 30;
+        this.isReloading = false;
+
+        // Controles
+        this.teclas = this.input.keyboard.addKeys({
+            up: Phaser.Input.Keyboard.KeyCodes.W,
+            left: Phaser.Input.Keyboard.KeyCodes.A,
+            down: Phaser.Input.Keyboard.KeyCodes.S,
+            right: Phaser.Input.Keyboard.KeyCodes.D,
+            space: Phaser.Input.Keyboard.KeyCodes.SPACE,
+            shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+            recargar: Phaser.Input.Keyboard.KeyCodes.R
+        });
+
+        // Disparo por clic
+        this.input.on('pointerdown', (pointer) => {
+            if (this.isShooting) return;
+            this.disparar(pointer);
+        });
+
+        // UI
+        // Barra de stamina
         this.barrasUI = this.add.graphics();
-        this.barrasUI.setScrollFactor(0); // Fijo en pantalla
+        this.barrasUI.setScrollFactor(0);
 
-        // Mostrar nombres de los frames en la consola para depuración
+        // Texto de Munición
+        this.textoMunicion = this.add.text(12, 40, 'BALAS: 30 / 30', {
+            fontSize: '20px',
+            fill: '#ffffff',
+            fontFamily: 'Arial'
+        });
+        this.textoMunicion.setScrollFactor(0);
+
+        // Entorno y físicas
         const frameNames = this.textures.get('soldado').getFrameNames();
-        console.log('Nombres de los frames:', frameNames);
+        console.log('Frames:', frameNames);
 
-        // Configuración del entorno
+        // Fondo
         if (this.textures.exists('sky')) {
             this.add.image(400, 300, 'sky');
         } else {
             this.cameras.main.setBackgroundColor('#444444');
         }
 
+        // Plataformas
         this.plataformas = this.physics.add.staticGroup();
         if (this.textures.exists('suelo')) {
             this.plataformas.create(400, 568, 'suelo').setScale(2).refreshBody();
@@ -52,105 +82,150 @@ export class GameScene extends Phaser.Scene {
             this.plataformas.add(piso);
         }
 
-        // Configuración del jugador
+        // Jugador
         this.jugador = this.physics.add.sprite(100, 450, 'soldado', 'inactivo1');
-
         this.jugador.setOrigin(0.5, 1); 
-
-        this.jugador.setScale(1); // Escala normal (128px)
+        this.jugador.setScale(1);
         this.jugador.setBounce(0.1);
         this.jugador.setCollideWorldBounds(true);
         this.jugador.body.setSize(40, 60); 
-
-        //(DESPLAZAMIENTO)
         this.jugador.body.setOffset(44, 68);
 
+        // Grupo de enemigos (necesario antes de crear colliders)
+        this.enemigos = this.physics.add.group();
+
+        this.physics.add.collider(this.jugador, this.plataformas);
+        this.physics.add.collider(this.enemigos, this.plataformas);
+
+        // Grupo de balas
         this.balas = this.physics.add.group({
             defaultKey: 'bala',
             maxSize: 10
         });
 
-        this.physics.add.collider(this.jugador, this.plataformas);
 
-        // Configuración de controles
-        this.teclas = this.input.keyboard.addKeys({
-            up: Phaser.Input.Keyboard.KeyCodes.W,
-            left: Phaser.Input.Keyboard.KeyCodes.A,
-            down: Phaser.Input.Keyboard.KeyCodes.S,
-            right: Phaser.Input.Keyboard.KeyCodes.D,
-            space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-            shift: Phaser.Input.Keyboard.KeyCodes.SHIFT // Tecla para correr
-        });
 
-        // Crear animaciones del jugador
+        // Enemigos
+        // Crea un enemigo en (x, y)
+        this.crearEnemigo = (x, y) => {
+            // Usamos el mismo sprite 'soldado'
+            const enemigo = this.enemigos.create(x, y, 'soldado', 'inactivo1');
+            
+            // Ajustes físicos
+            enemigo.setOrigin(0.5, 1);
+            enemigo.body.setSize(40, 60);
+            enemigo.body.setOffset(44, 68);
+            enemigo.setCollideWorldBounds(true);
+            enemigo.setBounce(0.1);
 
-        // Animación de caminar
+            // Marcador visual
+            enemigo.setTint(0xff5555); 
+            
+            // Vida (opcional)
+            enemigo.vida = 3; 
+        };
+
+        // Spawn inicial
+        this.crearEnemigo(600, 450); // A la derecha del mapa
+
+        // Animaciones
+
         this.anims.create({
             key: 'walk',
             frames: this.anims.generateFrameNames('soldado', { 
-                prefix: 'caminar', 
-                start: 1, end: 8, zeroPad: 0, suffix: '' 
+                prefix: 'caminar', start: 1, end: 8, zeroPad: 0, suffix: '' 
             }),
-            frameRate: 10,
-            repeat: -1
+            frameRate: 10, repeat: -1
         });
 
-        // Animación de correr
         this.anims.create({
             key: 'run',
             frames: this.anims.generateFrameNames('soldado', { 
-                prefix: 'correr', 
-                start: 1, end: 8, zeroPad: 0, suffix: '' 
+                prefix: 'correr', start: 1, end: 8, zeroPad: 0, suffix: '' 
             }),
-            frameRate: 14, // Más rápido
-            repeat: -1
+            frameRate: 14, repeat: -1
         });
 
-        // Animación de estar quieto
         this.anims.create({
             key: 'idle',
             frames: this.anims.generateFrameNames('soldado', { 
-                prefix: 'inactivo', 
-                start: 1, end: 9, zeroPad: 0, suffix: ''
+                prefix: 'inactivo', start: 1, end: 9, zeroPad: 0, suffix: ''
             }),
-            frameRate: 8,
-            repeat: -1
+            frameRate: 8, repeat: -1
         });
 
-        // Animación de disparo
         this.anims.create({
             key: 'shoot',
             frames: this.anims.generateFrameNames('soldado', { 
-                prefix: 'disparar',
-                start: 1, end: 4, zeroPad: 0, suffix: ''
+                prefix: 'disparar', start: 1, end: 4, zeroPad: 0, suffix: ''
             }),
-            frameRate: 20,
-            repeat: 0
+            frameRate: 20, repeat: 0
         });
 
-        // Evento para controlar el fin de la animación de disparo
+        this.anims.create({
+            key: 'reload',
+            frames: this.anims.generateFrameNames('soldado', { 
+                prefix: 'recargar', start: 1, end: 7, zeroPad: 0, suffix: '' 
+            }),
+            frameRate: 10, repeat: 0
+        });
+
+        // Animación de muerte
+        this.anims.create({
+            key: 'dead',
+            frames: this.anims.generateFrameNames('soldado', { 
+                prefix: 'muerte', start: 1, end: 4, zeroPad: 0, suffix: ''
+            }),
+            frameRate: 10,
+            repeat: 0 
+        });
+
+        // Eventos de animación
         this.jugador.on('animationcomplete-shoot', () => {
             this.isShooting = false;
         });
 
-        // Configurar disparo al hacer clic
-        this.input.on('pointerdown', (pointer) => {
-            if (this.isShooting) return;
-            this.disparar(pointer);
+        this.jugador.on('animationcomplete-reload', () => {
+            this.municionActual = this.municionMax;
+            this.isReloading = false;
+            this.actualizarTextoMunicion();
+        });
+
+        // Colisión balas vs enemigos
+        this.physics.add.overlap(this.balas, this.enemigos, (bala, enemigo) => {
+            // Eliminar bala
+            bala.destroy(); // O bala.disableBody(true, true) si quieres reciclarla
+
+            // Muerte instantánea
+            if (enemigo.body.enable) {
+                enemigo.body.enable = false;
+                enemigo.setTint(0xffffff);
+                enemigo.anims.play('dead', true);
+                enemigo.on('animationcomplete-dead', () => {
+                    enemigo.destroy();
+                });
+            }
         });
     }
 
     update() {
         if (!this.jugador) return;
 
-        // Regenerar stamina si no está corriendo ni saltando
+        // --- 1. LÓGICA DE RECARGA (INPUT) ---
+        // Detectar si se presiona la tecla R una sola vez
+        if (Phaser.Input.Keyboard.JustDown(this.teclas.recargar)) {
+            this.iniciarRecarga();
+        }
+
+        // --- 2. STAMINA ---
+        // Regenerar stamina si no está corriendo
         const estaCorriendo = this.teclas.shift.isDown && (this.teclas.left.isDown || this.teclas.right.isDown);
         
         if (!estaCorriendo && this.stamina < this.maxStamina) {
-            this.stamina += 0.3; // Velocidad de recuperación
+            this.stamina += 0.3; 
         }
 
-        // Control de movimiento del jugador
+        // --- 3. MOVIMIENTO ---
         let velocidadActual = this.velocidadCaminar;
         let animacionMovimiento = 'walk';
 
@@ -158,7 +233,8 @@ export class GameScene extends Phaser.Scene {
         if (this.teclas.shift.isDown && this.stamina > 0) {
             velocidadActual = this.velocidadCorrer;
             animacionMovimiento = 'run';
-            // Consumir stamina al moverse
+            
+            // Consumir stamina si se mueve
             if (this.teclas.left.isDown || this.teclas.right.isDown) {
                 this.stamina -= this.costoCorrer;
             }
@@ -174,35 +250,55 @@ export class GameScene extends Phaser.Scene {
             this.jugador.setVelocityX(0);
         }
 
-        // Control de salto
+        // --- 4. SALTO ---
         if ((this.teclas.up.isDown || this.teclas.space.isDown) && 
             this.jugador.body.touching.down && 
             this.stamina >= this.costoSalto) {
             
             this.jugador.setVelocityY(-330);
-            this.stamina -= this.costoSalto; // Reducir stamina al saltar
+            this.stamina -= this.costoSalto; 
         }
 
-        // Actualizar la barra de stamina en la interfaz
+        // Actualizar la barra de stamina
         this.actualizarInterfaz();
 
-        // Control de animaciones del jugador
+        // --- 5. CONTROL DE ANIMACIONES (PRIORIDADES) ---
         
-        // Animación de disparo
-        if (this.isShooting) {
-            // Esperar a que termine
+        // PRIORIDAD 1: RECARGANDO (Bloquea todo lo demás)
+        if (this.isReloading) {
+            // No hacemos nada, dejamos que la animación 'reload' termine sola
         }
-        // Animación de movimiento
+        // PRIORIDAD 2: DISPARANDO
+        else if (this.isShooting) {
+            // Esperamos a que termine el disparo
+        }
+        // PRIORIDAD 3: MOVIMIENTO (Suelo)
         else if (this.jugador.body.velocity.x !== 0) {
-            this.jugador.anims.play(animacionMovimiento, true); // Puede ser 'walk' o 'run'
+            this.jugador.anims.play(animacionMovimiento, true);
         }
-        // Animación de estar quieto
+        // PRIORIDAD 4: QUIETO
         else {
             this.jugador.anims.play('idle', true);
         }
+        
+        // Nota: He quitado la animación de Salto intencionalmente 
+        // porque borraste las imágenes defectuosas.
     }
 
     disparar(pointer) {
+        // 1. BLOQUEOS: Si recarga, si no tiene balas, o si ya está disparando
+        if (this.isReloading || this.isShooting) return;
+
+        if (this.municionActual <= 0) {
+            console.log("¡Click! Sin balas"); // Aquí luego pondremos sonido de "vacío"
+            // Opcional: Forzar recarga automática si disparas sin balas
+            this.iniciarRecarga();
+            return;
+        }
+
+        // --- LÓGICA DE DISPARO NORMAL ---
+        
+        // Orientación del personaje
         if (pointer.worldX < this.jugador.x) {
             this.jugador.setFlipX(true);
         } else {
@@ -210,6 +306,9 @@ export class GameScene extends Phaser.Scene {
         }
         
         this.isShooting = true;
+        this.municionActual--; // Restamos una bala
+        this.actualizarTextoMunicion(); // Actualizamos el UI
+        
         this.jugador.anims.play('shoot', true);
 
         const bala = this.balas.get(this.jugador.x, this.jugador.y);
@@ -218,15 +317,13 @@ export class GameScene extends Phaser.Scene {
             bala.setActive(true);
             bala.setVisible(true);
             
-            // Ajustar la posición de salida de la bala
+            // Ajuste de posición (recuerda que cambiamos el origin a los pies)
             const offset = this.jugador.flipX ? -30 : 30;
             bala.setPosition(this.jugador.x + offset, this.jugador.y - 45);
 
             const angulo = Phaser.Math.Angle.Between(
-                this.jugador.x, 
-                this.jugador.y, 
-                pointer.worldX, 
-                pointer.worldY
+                this.jugador.x, this.jugador.y, 
+                pointer.worldX, pointer.worldY
             );
 
             bala.setRotation(angulo);
@@ -237,6 +334,22 @@ export class GameScene extends Phaser.Scene {
                 bala.setVisible(false);
             });
         }
+    }
+
+    iniciarRecarga() {
+        // Solo recargar si no estoy lleno y no estoy recargando ya
+        if (!this.isReloading && this.municionActual < this.municionMax) {
+            this.isReloading = true;
+            this.jugador.anims.play('reload', true);
+        }
+    }
+
+    actualizarTextoMunicion() {
+        this.textoMunicion.setText(`BALAS: ${this.municionActual} / ${this.municionMax}`);
+        
+        // Color rojo si quedan pocas
+        if (this.municionActual === 0) this.textoMunicion.setColor('#ff0000');
+        else this.textoMunicion.setColor('#ffffff');
     }
 
     actualizarInterfaz() {
