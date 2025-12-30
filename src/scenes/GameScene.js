@@ -50,7 +50,7 @@ export class GameScene extends Phaser.Scene {
         const altoMundo = 324; 
         const anchoMundo = 3000; 
 
-        this.physics.world.setBounds(0, 0, anchoMundo, altoMundo);
+        this.physics.world.setBounds(0, 0, anchoMundo, altoMundo + 100);
         this.cameras.main.setBounds(0, 0, anchoMundo, altoMundo);
 
         // --- 2. FONDOS ---
@@ -76,7 +76,7 @@ export class GameScene extends Phaser.Scene {
         // A) SUELO INVISIBLE (Fundamental)
         // La Y ahora es 314 (324 altura total - 10px margen)
         // El ancho cubre todo el nivel (3000)
-        const suelo = this.add.rectangle(anchoMundo / 2, 314, anchoMundo, 20, 0x00ff00, 0.5); 
+        const suelo = this.add.rectangle(anchoMundo / 2, 330, anchoMundo, 50, 0x00ff00, 0.5); 
         this.physics.add.existing(suelo, true);
         this.plataformas.add(suelo);
 
@@ -87,6 +87,11 @@ export class GameScene extends Phaser.Scene {
 
         // --- 4. GRUPOS ---
         this.grupoBalas = this.physics.add.group({
+            classType: Bala,
+            runChildUpdate: true
+        });
+
+        this.balasEnemigos = this.physics.add.group({
             classType: Bala,
             runChildUpdate: true
         });
@@ -104,6 +109,17 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.collider(this.jugador, this.plataformas);
         this.physics.add.collider(this.enemigos, this.plataformas);
         this.physics.add.collider(this.pickups, this.plataformas);
+        this.physics.add.overlap(this.jugador, this.balasEnemigos, (jugador, bala) => {
+            bala.destroy(); // La bala desaparece
+            
+            // EL JUGADOR RECIBE DAÑO
+            // Aquí definimos que quita MENOS vida (ej. 0.5 o 1)
+            // Si tu sistema de vida es de enteros, quita 1.
+            jugador.recibirDaño(null); // Pasamos null porque no chocó con un cuerpo, sino una bala
+            
+            // Opcional: Empuje pequeño
+            jugador.setVelocityY(-100);
+        });
 
         // --- 6. CONTROLES ---
         this.teclas = this.input.keyboard.addKeys({
@@ -171,20 +187,31 @@ export class GameScene extends Phaser.Scene {
         this.plataformas.add(plat);
     }
 
+    // Copia y pega esta función corregida en GameScene.js
+
     iniciarSpawners() {
         // 1. Enemigos
         this.time.addEvent({
             delay: 3000,
             loop: true,
             callback: () => {
-                const distancia = Phaser.Math.Between(300, 500); // Distancia más corta por la resolución
+                // CORRECCIÓN CRASH: Si el jugador murió, abortamos misión
+                if (!this.jugador || !this.jugador.active) return;
+
+                const distancia = Phaser.Math.Between(300, 500); 
                 const direccion = Phaser.Math.Between(0, 1) ? 1 : -1;
                 const x = this.jugador.x + (distancia * direccion);
                 
-                // ALTURA CORREGIDA: 270 (Cerca del suelo que está en 314)
+                // CORRECCIÓN ALTURA: 
+                // 100 = Caen del cielo (seguro)
+                // 250 = Caen poquito (casi suelo)
+                const y = 210; 
+
                 if (x > 0 && x < 3000) {
-                    const enemigo = new Enemigo(this, x, 270); 
+                    const enemigo = new Enemigo(this, x, y); 
                     this.enemigos.add(enemigo);
+                    // Aseguramos depth para que se vea delante del fondo
+                    enemigo.setDepth(10); 
                 }
             }
         });
@@ -192,8 +219,7 @@ export class GameScene extends Phaser.Scene {
         // 2. Loot Inicial
         for(let i=0; i < 8; i++) {
             const x = Phaser.Math.Between(200, 2800);
-            // ALTURA CORREGIDA: 250 (Para que caigan al suelo)
-            this.spawnPickup(x, 250);
+            this.spawnPickup(x, 100); // 100 para que caigan del cielo también
         }
     }
 
