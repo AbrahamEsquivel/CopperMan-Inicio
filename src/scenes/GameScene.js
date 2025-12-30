@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Jugador } from '../entidades/Jugador';
 import { Enemigo } from '../entidades/Enemigo';
+import { Bala } from '../entidades/Bala';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -18,6 +19,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
+
+        this.time.addEvent({
+            delay: 2000, 
+            callback: this.spawnEnemigo,
+            callbackScope: this,
+            loop: true
+        });
+
+        // --- GRUPO DE BALAS ---
+        // Aquí está la magia: classType y runChildUpdate
+        this.grupoBalas = this.physics.add.group({
+            classType: Bala,       // Usar nuestra clase personalizada
+            runChildUpdate: true,  // Permitir que las balas ejecuten su método update()
+            maxSize: 30            // Opcional: Límite de balas en pantalla
+        });
+
+        // (Jugador se creará más abajo una vez estén las plataformas)
+
         // --- 1. MUNDO Y CÁMARA ---
         this.physics.world.setBounds(0, 0, 2000, 600);
         this.cameras.main.setBounds(0, 0, 2000, 600);
@@ -68,24 +87,28 @@ export class GameScene extends Phaser.Scene {
         this.enemigos.add(zombi); // Agregarlo al grupo para colisiones
 
         // --- 5. BALAS ---
-        this.balas = this.physics.add.group({
-            defaultKey: 'bala',
-            maxSize: 10
-        });
-
-        // Evento de disparo (Input)
         this.input.on('pointerdown', (pointer) => {
-            // Llamamos al método disparar DEL JUGADOR
-            this.jugador.disparar(pointer, this.balas);
+            this.jugador.disparar(pointer, this.grupoBalas);
         });
 
         // --- 6. COLISIONES (LÓGICA DE JUEGO) ---
 
         // A) Balas vs Enemigos
-        this.physics.add.overlap(this.balas, this.enemigos, (bala, enemigo) => {
-            bala.destroy();
-            // Llamamos al método recibirDaño DEL ENEMIGO
-            enemigo.recibirDaño(); 
+        this.physics.add.overlap(this.grupoBalas, this.enemigos, (bala, enemigo) => {
+            // 1. Apagar bala
+            if (bala.deactivate) bala.deactivate(); else bala.destroy();
+
+            // 2. Calcular empuje (La bala empuja al enemigo hacia atrás)
+            const direccionEmpuje = bala.x < enemigo.x ? 1 : -1;
+            
+            // Si el enemigo sigue vivo, lo empujamos
+            if (!enemigo.isDead) {
+                enemigo.setVelocityX(150 * direccionEmpuje);
+                enemigo.setVelocityY(-100); // Un saltito pequeño al recibir el impacto
+            }
+
+            // 3. Aplicar daño
+            enemigo.recibirDaño();
         });
 
         // B) Jugador vs Enemigos
@@ -101,12 +124,14 @@ export class GameScene extends Phaser.Scene {
         this.crearAnimaciones();
     }
 
-    update() {
+    update(time, delta) {
         if (!this.jugador) return;
 
         // 1. Actualizar Jugador (Él gestiona su movimiento, recarga, etc.)
         this.jugador.update();
 
+        // Disparo gestionado por `pointerdown` (solo ratón)
+        
         // 2. Actualizar Enemigos (IA)
         this.enemigos.children.iterate((enemigo) => {
             if (enemigo) {
@@ -149,6 +174,23 @@ export class GameScene extends Phaser.Scene {
         // Textos
         this.textoMunicion.setText(`BALAS: ${j.municionActual} / ${j.municionMax}`);
         this.textoVida.setText(`VIDA: ${j.vidaActual}`);
+    }
+
+    spawnEnemigo() {
+        // 1. Elegir un lado de la pantalla aleatorio (Izquierda o Derecha)
+        // El jugador está en this.jugador.x
+        // Queremos que aparezcan fuera de cámara, p.ej. a 500px de distancia
+        
+        const distanciaSpawn = 500;
+        const direccion = Phaser.Math.Between(0, 1) === 0 ? 1 : -1;
+        const x = this.jugador.x + (distanciaSpawn * direccion);
+        
+        // Altura (asumiendo suelo plano en y=450, ajusta a tus plataformas)
+        const y = 450; 
+        
+        // Crear enemigo
+        const enemigo = new Enemigo(this, x, y);
+        this.enemigos.add(enemigo); // Agregarlo al grupo físico
     }
 
     crearAnimaciones() {

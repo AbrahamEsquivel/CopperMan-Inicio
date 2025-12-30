@@ -126,6 +126,12 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
     recibirDaño(enemigo) {
         if (this.esInvulnerable || this.vidaActual <= 0) return;
         
+        // --- AGREGA ESTO AQUÍ ---
+        // Si nos golpean, cancelamos cualquier acción en curso inmediatamente
+        this.isShooting = false; 
+        this.isReloading = false;
+        // ------------------------
+
         this.vidaActual--;
         
         // Lógica de Knockback
@@ -138,7 +144,9 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         // Muerte
         if (this.vidaActual <= 0) {
             this.anims.play('dead', true);
-            // Avisar a la escena que morimos (opcional)
+            // Asegúrate de desactivar físicas al morir para que no lo sigan empujando
+            this.setVelocityX(0); 
+            // this.body.enable = false; // Opcional: si quieres que caiga y ya no choque
         } else {
             // Recuperarse
             this.scene.time.delayedCall(1000, () => {
@@ -152,7 +160,7 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
     disparar(pointer, grupoBalas) {
         if (this.isReloading || this.isShooting || this.municionActual <= 0) return;
 
-        // Orientación
+        // Orientación del sprite
         if (pointer.worldX < this.x) this.setFlipX(true);
         else this.setFlipX(false);
 
@@ -160,22 +168,32 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         this.municionActual--;
         this.anims.play('shoot', true);
         
-        // Crear bala usando el grupo que nos pasa la escena
-        const bala = grupoBalas.get(this.x, this.y);
-        if (bala) {
+        // --- AQUÍ CAMBIA ---
+        // Pedimos una bala al grupo. Si no hay disponibles (maxSize), nos devuelve null
+        const offset = this.flipX ? -30 : 30;
+        const spawnX = this.x + offset;
+        const spawnY = this.y - 45;
+        
+        const angulo = Phaser.Math.Angle.Between(spawnX, spawnY, pointer.worldX, pointer.worldY);
+        const bala = grupoBalas.get(spawnX, spawnY);
+        if (!bala) return;
+        
+        // Si la bala tiene método `fire` (clase Bala), usarlo
+        if (typeof bala.fire === 'function') {
+            bala.fire(spawnX, spawnY, angulo);
+        } else {
+            // Fallback: activar y darle velocidad
             bala.setActive(true);
             bala.setVisible(true);
-            const offset = this.flipX ? -30 : 30;
-            bala.setPosition(this.x + offset, this.y - 45);
-
-            const angulo = Phaser.Math.Angle.Between(this.x, this.y, pointer.worldX, pointer.worldY);
+            if (bala.body) bala.body.enable = true;
+            bala.setPosition(spawnX, spawnY);
             bala.setRotation(angulo);
             this.scene.physics.velocityFromRotation(angulo, 900, bala.body.velocity);
-
             this.scene.time.delayedCall(2000, () => {
-                bala.setActive(false);
-                bala.setVisible(false);
+                if (bala.deactivate) bala.deactivate(); else bala.setActive(false);
             });
         }
+        
+        // bala ya fue activada arriba (fire) o gestionada en el fallback
     }
 }
