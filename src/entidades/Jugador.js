@@ -136,18 +136,25 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
     // Aquí moveremos recibirDaño y disparar más adelante
     recibirDaño(enemigo) {
         if (this.esInvulnerable || this.vidaActual <= 0) return;
-        
-        // --- AGREGA ESTO AQUÍ ---
-        // Si nos golpean, cancelamos cualquier acción en curso inmediatamente
-        this.isShooting = false; 
+
+        // Cancelar acciones en curso
+        this.isShooting = false;
         this.isReloading = false;
-        // ------------------------
 
         this.vidaActual--;
-        
+
         // Lógica de Knockback
         this.esInvulnerable = true;
-        const dir = enemigo.x < this.x ? 1 : -1;
+        // Determinar dirección segura: aceptar objeto enemigo, número o null
+        let dir = 1;
+        if (enemigo && typeof enemigo.x === 'number') {
+            dir = (enemigo.x < this.x) ? 1 : -1;
+        } else if (typeof enemigo === 'number') {
+            dir = enemigo;
+        } else if (enemigo && typeof enemigo._dir === 'number') {
+            dir = enemigo._dir;
+        }
+
         this.setVelocityX(200 * dir);
         this.setVelocityY(-200);
         this.setTint(0xff0000);

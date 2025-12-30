@@ -110,14 +110,14 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.collider(this.enemigos, this.plataformas);
         this.physics.add.collider(this.pickups, this.plataformas);
         this.physics.add.overlap(this.jugador, this.balasEnemigos, (jugador, bala) => {
+            // Calcular dirección de impacto antes de destruir la bala
+            const direccionImpacto = (bala.x < jugador.x) ? 1 : -1;
             bala.destroy(); // La bala desaparece
-            
-            // EL JUGADOR RECIBE DAÑO
-            // Aquí definimos que quita MENOS vida (ej. 0.5 o 1)
-            // Si tu sistema de vida es de enteros, quita 1.
-            jugador.recibirDaño(null); // Pasamos null porque no chocó con un cuerpo, sino una bala
-            
-            // Opcional: Empuje pequeño
+
+            // Llamar recibirDaño pasando un objeto mínimo con la posición o la dirección
+            jugador.recibirDaño({ x: bala.x, _dir: direccionImpacto });
+
+            // Empuje pequeño
             jugador.setVelocityY(-100);
         });
 
