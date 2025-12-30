@@ -144,6 +144,10 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.grupoBalas, this.enemigos, (bala, enemigo) => {
             if (bala.deactivate) bala.deactivate(); else bala.destroy();
             enemigo.recibirDaño();
+            // Alertar al enemigo para que persiga al jugador tras ser alcanzado
+            if (enemigo && typeof enemigo.alertar === 'function') {
+                enemigo.alertar(this.jugador);
+            }
         });
 
         // Jugador vs Enemigos

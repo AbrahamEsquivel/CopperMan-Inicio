@@ -121,7 +121,9 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
 
     gestionarAnimaciones() {
         // Prioridades
-        if (this.isReloading || this.isShooting || this.isHealing || this.municionActual <= 0) return;
+        // No bloquear la actualización de animaciones sólo porque la munición sea 0:
+        // esto causaba que el sprite se quedara en el último frame de "shoot".
+        if (this.isReloading || this.isShooting || this.isHealing) return;
 
         if (!this.body.touching.down) {
             // No animamos salto porque no tienes los frames, pero aquí iría
@@ -198,7 +200,8 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         
         // Si la bala tiene método `fire` (clase Bala), usarlo
         if (typeof bala.fire === 'function') {
-            bala.fire(spawnX, spawnY, angulo);
+            // Velocidad más alta y sin gravedad para que vaya recta
+            bala.fire(spawnX, spawnY, angulo, 1400, false);
         } else {
             // Fallback: activar y darle velocidad
             bala.setActive(true);

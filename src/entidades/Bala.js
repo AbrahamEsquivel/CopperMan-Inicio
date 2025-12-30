@@ -9,13 +9,20 @@ export class Bala extends Phaser.Physics.Arcade.Sprite {
 
     // Este método se llama cuando el jugador dispara
     fire(x, y, angulo) {
-        // activar y posicionar
+        // activar y posicionar. Acepta parámetros opcionales: velocidad y gravedad
+        const args = Array.from(arguments);
+        const speed = (args.length >= 4 && typeof args[3] === 'number') ? args[3] : 900;
+        const useGravity = (args.length >= 5 && typeof args[4] === 'boolean') ? args[4] : false;
+
         this.setActive(true);
         this.setVisible(true);
-        if (this.body) this.body.enable = true;
+        if (this.body) {
+            this.body.enable = true;
+            this.body.allowGravity = !!useGravity;
+        }
         this.setPosition(x, y);
         this.setRotation(angulo);
-        this.scene.physics.velocityFromRotation(angulo, 900, this.body.velocity);
+        this.scene.physics.velocityFromRotation(angulo, speed, this.body.velocity);
         this.lifespan = 2000;
     }
 

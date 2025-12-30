@@ -24,13 +24,13 @@ export class Enemigo extends Phaser.Physics.Arcade.Sprite {
         // --- ESTADÍSTICAS ---
         this.vida = 3;
         this.velocidadPatrulla = 30; // Camina lento
-        this.velocidadPersecucion = 70; // Corre rápido
+        this.velocidadPersecucion = 80; // Corre rápido
         
         // --- IA (CEREBRO) ---
         this.rangoVision = 250;  // Distancia para verte
-        this.rangoAtaque = 120;  // Distancia para disparar
+        this.rangoAtaque = 200;  // Distancia para disparar
         this.nextShot = 0;       // Cooldown de disparo
-        this.fireRate = 2000;    // Dispara cada 2 segundos
+        this.fireRate = 800;    // Dispara cada 2 segundos
 
         // PATRULLAJE
         this.distanciaPatrulla = 100; // Cuánto camina antes de dar la vuelta
@@ -126,12 +126,9 @@ export class Enemigo extends Phaser.Physics.Arcade.Sprite {
             
             // Si la bala tiene método fire (tu clase Bala.js mejorada), úsalo
             if (bala.fire) {
-                bala.fire(this.x, this.y - 20, angulo);
-                
-                // OPCIONAL: Cambiar color de bala enemiga
-                bala.setTint(0xff0000); 
-                // Hacerla más lenta que la del jugador para que sea esquivable
-                this.scene.physics.velocityFromRotation(angulo, 300, bala.body.velocity); 
+                // Velocidad menor y sin gravedad para balas enemigas
+                bala.fire(this.x, this.y - 20, angulo, 300, false);
+                bala.setTint(0xff0000);
             }
         }
     }
@@ -145,6 +142,18 @@ export class Enemigo extends Phaser.Physics.Arcade.Sprite {
         });
 
         if (this.vida <= 0) this.morir();
+    }
+
+    // Cuando el enemigo recibe un impacto de bala, se le puede "alertar"
+    // para que abandone patrulla y persiga al jugador.
+    alertar(target) {
+        if (this.isDead) return;
+        // Aumentar su rango de visión para que detecte al jugador desde lejos
+        this.rangoVision = Math.max(this.rangoVision, 1000);
+        // Opcional: aumentar velocidad de persecución en modo agresivo
+        this.velocidadPersecucion = Math.max(this.velocidadPersecucion, 90);
+        // Guardar referencia al objetivo (no estrictamente necesaria porque update recibe jugador)
+        this.target = target;
     }
 
     morir() {
