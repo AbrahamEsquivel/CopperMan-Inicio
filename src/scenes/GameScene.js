@@ -13,6 +13,10 @@ export class GameScene extends Phaser.Scene {
 
     preload() {
         this.load.atlas('soldado', 'assets/soldado.png', 'assets/soldado.json');
+
+        this.load.image('bg_cielo', 'assets/Nivel1/fondo_cielo.png'); 
+        this.load.image('bg_ruinas', 'assets/Nivel1/fondo_ruinas.png'); 
+        this.load.image('bg_juego', 'assets/Nivel1/fondo_juego.png');
         
         // --- 1. Generar Textura de BOTIQUÍN (Cruz Roja) ---
         const graphicsVida = this.make.graphics({ x: 0, y: 0, add: false });
@@ -41,62 +45,67 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // --- 1. CONFIGURACIÓN DEL MUNDO (PIXEL ART) ---
+        // Ajustamos al alto de tu imagen (324px)
+        const altoMundo = 324; 
+        const anchoMundo = 3000; 
 
-        this.time.addEvent({
-            delay: 2000, 
-            callback: this.spawnEnemigo,
-            callbackScope: this,
-            loop: true
-        });
+        this.physics.world.setBounds(0, 0, anchoMundo, altoMundo);
+        this.cameras.main.setBounds(0, 0, anchoMundo, altoMundo);
 
-        // --- GRUPO DE BALAS ---
-        // Aquí está la magia: classType y runChildUpdate
-        this.grupoBalas = this.physics.add.group({
-            classType: Bala,       // Usar nuestra clase personalizada
-            runChildUpdate: true,  // Permitir que las balas ejecuten su método update()
-            maxSize: 30            // Opcional: Límite de balas en pantalla
-        });
+        // --- 2. FONDOS ---
+        // Cielo (Capa 1 - Fondo)
+        this.bgCielo = this.add.tileSprite(0, 0, anchoMundo, altoMundo, 'bg_cielo')
+            .setOrigin(0, 0)
+            .setScrollFactor(0.1);
 
-        // (Jugador se creará más abajo una vez estén las plataformas)
+        // Ruinas (Capa 2 - Medio)
+        this.bgRuinas = this.add.tileSprite(0, 0, anchoMundo, altoMundo, 'bg_ruinas')
+            .setOrigin(0, 0)
+            .setScrollFactor(0.5);
 
-        // --- 1. MUNDO Y CÁMARA ---
-        this.physics.world.setBounds(0, 0, 2000, 600);
-        this.cameras.main.setBounds(0, 0, 2000, 600);
+        // Juego (Capa 3 - Frente)
+        // Importante: Ponemos el origen en 0,0 para que empiece arriba a la izquierda
+        this.bgJuego = this.add.image(0, 0, 'bg_juego')
+            .setOrigin(0, 0)
+            .setScrollFactor(1);
 
-        // pickups (se crean después de plataformas/jugador)
-
-        // Fondo
-        if (this.textures.exists('sky')) {
-            this.add.image(400, 300, 'sky').setScrollFactor(0); // Fondo fijo o parallax simple
-        } else {
-            this.cameras.main.setBackgroundColor('#444444');
-        }
-
-        // --- 2. PLATAFORMAS ---
+        // --- 3. PLATAFORMAS ---
         this.plataformas = this.physics.add.staticGroup();
-        if (this.textures.exists('suelo')) {
-            this.plataformas.create(400, 568, 'suelo').setScale(2).refreshBody();
-            this.plataformas.create(600, 400, 'suelo');
-        } else {
-            const piso = this.add.rectangle(400, 580, 800, 40, 0x00ff00);
-            this.physics.add.existing(piso, true);
-            this.plataformas.add(piso);
-        }
 
-        // --- 3. JUGADOR ---
-        // Instanciamos la clase Jugador
-        this.jugador = new Jugador(this, 100, 450);
-        this.cameras.main.startFollow(this.jugador);
-        this.physics.add.collider(this.jugador, this.plataformas);
+        // A) SUELO INVISIBLE (Fundamental)
+        // La Y ahora es 314 (324 altura total - 10px margen)
+        // El ancho cubre todo el nivel (3000)
+        const suelo = this.add.rectangle(anchoMundo / 2, 314, anchoMundo, 20, 0x00ff00, 0.5); 
+        this.physics.add.existing(suelo, true);
+        this.plataformas.add(suelo);
 
-        // --- PICKUPS ---
-        this.pickups = this.physics.add.group();
-        this.physics.add.collider(this.pickups, this.plataformas);
-        this.physics.add.overlap(this.jugador, this.pickups, (jugador, pickup) => {
-            this.recogerPickup(jugador, pickup);
+        // B) PLATAFORMAS FLOTANTES
+        // Ajustadas a la nueva altura. Antes Y=450, ahora Y=200 aprox.
+        this.crearPlataformaInvisible(800, 200, 150, 10);  // Ejemplo Ala de avión
+        this.crearPlataformaInvisible(1200, 150, 100, 10); // Ejemplo Caja alta
+
+        // --- 4. GRUPOS ---
+        this.grupoBalas = this.physics.add.group({
+            classType: Bala,
+            runChildUpdate: true
         });
+        
+        this.enemigos = this.physics.add.group();
+        this.pickups = this.physics.add.group();
 
-        // Controles
+        // --- 5. JUGADOR ---
+        // Spawn ajustado: X=50, Y=200 (para que caiga al suelo)
+        this.jugador = new Jugador(this, 50, 200); 
+        
+        this.cameras.main.startFollow(this.jugador, true, 0.1, 0.1);
+        
+        // COLISIONES FÍSICAS
+        this.physics.add.collider(this.jugador, this.plataformas);
+        this.physics.add.collider(this.enemigos, this.plataformas);
+        this.physics.add.collider(this.pickups, this.plataformas);
+
+        // --- 6. CONTROLES ---
         this.teclas = this.input.keyboard.addKeys({
             up: Phaser.Input.Keyboard.KeyCodes.W,
             left: Phaser.Input.Keyboard.KeyCodes.A,
@@ -106,155 +115,135 @@ export class GameScene extends Phaser.Scene {
             shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
             recargar: Phaser.Input.Keyboard.KeyCodes.R
         });
-        // Le pasamos las teclas al jugador para que él se mueva
         this.jugador.asignarControles(this.teclas);
 
-        // --- 4. ENEMIGOS ---
-        this.enemigos = this.physics.add.group();
-        this.physics.add.collider(this.enemigos, this.plataformas);
-
-        // Spawn inicial de prueba (Usando la nueva clase Enemigo)
-        const zombi = new Enemigo(this, 600, 450);
-        this.enemigos.add(zombi); // Agregarlo al grupo para colisiones
-
-        // --- 5. BALAS ---
+        // DISPARO
         this.input.on('pointerdown', (pointer) => {
             this.jugador.disparar(pointer, this.grupoBalas);
         });
 
-        // --- 6. COLISIONES (LÓGICA DE JUEGO) ---
-
-        // A) Balas vs Enemigos
+        // --- 7. LÓGICA DE JUEGO (Colisiones) ---
+        
+        // Balas vs Enemigos
         this.physics.add.overlap(this.grupoBalas, this.enemigos, (bala, enemigo) => {
-            // 1. Apagar bala
             if (bala.deactivate) bala.deactivate(); else bala.destroy();
-
-            // 2. Calcular empuje (La bala empuja al enemigo hacia atrás)
-            const direccionEmpuje = bala.x < enemigo.x ? 1 : -1;
-            
-            // Si el enemigo sigue vivo, lo empujamos
-            if (!enemigo.isDead) {
-                enemigo.setVelocityX(150 * direccionEmpuje);
-                enemigo.setVelocityY(-100); // Un saltito pequeño al recibir el impacto
-            }
-
-            // 3. Aplicar daño
             enemigo.recibirDaño();
         });
 
-        // B) Jugador vs Enemigos
+        // Jugador vs Enemigos
         this.physics.add.collider(this.jugador, this.enemigos, (jugador, enemigo) => {
-            // Llamamos al método recibirDaño DEL JUGADOR
             jugador.recibirDaño(enemigo);
         });
 
-        // --- 7. INTERFAZ (UI) ---
+        // Recoger Loot
+        this.physics.add.overlap(this.jugador, this.pickups, (jugador, pickup) => {
+            this.recogerPickup(jugador, pickup);
+        });
+
+        // --- 8. UI Y SYSTEMAS ---
         this.crearInterfaz();
-        
-        // --- 8. ANIMACIONES GLOBALES ---
         this.crearAnimaciones();
+        
+        // Iniciamos spawners (Revisa el método abajo, también corregí las alturas)
+        this.iniciarSpawners();
     }
 
     update(time, delta) {
-        if (!this.jugador) return;
-
-        // 1. Actualizar Jugador (Él gestiona su movimiento, recarga, etc.)
-        this.jugador.update();
-
-        // Disparo gestionado por `pointerdown` (solo ratón)
+        if(this.jugador) this.jugador.update();
         
-        // 2. Actualizar Enemigos (IA)
-        this.enemigos.children.iterate((enemigo) => {
-            if (enemigo) {
-                enemigo.update(this.jugador);
+        this.enemigos.children.iterate(e => {
+            if(e) e.update(this.jugador);
+        });
+
+        this.actualizarInterfaz();
+        
+        // Parallax horizontal infinito (opcional)
+        this.bgCielo.tilePositionX = this.cameras.main.scrollX * 0.1;
+        this.bgRuinas.tilePositionX = this.cameras.main.scrollX * 0.5;
+    }
+
+    // --- MÉTODOS AUXILIARES CORREGIDOS ---
+
+    crearPlataformaInvisible(x, y, ancho, alto) {
+        // Cambia el 0 por 0.5 si quieres verlas para depurar
+        const plat = this.add.rectangle(x, y, ancho, alto, 0x0000ff, 0.5); 
+        this.physics.add.existing(plat, true);
+        this.plataformas.add(plat);
+    }
+
+    iniciarSpawners() {
+        // 1. Enemigos
+        this.time.addEvent({
+            delay: 3000,
+            loop: true,
+            callback: () => {
+                const distancia = Phaser.Math.Between(300, 500); // Distancia más corta por la resolución
+                const direccion = Phaser.Math.Between(0, 1) ? 1 : -1;
+                const x = this.jugador.x + (distancia * direccion);
+                
+                // ALTURA CORREGIDA: 270 (Cerca del suelo que está en 314)
+                if (x > 0 && x < 3000) {
+                    const enemigo = new Enemigo(this, x, 270); 
+                    this.enemigos.add(enemigo);
+                }
             }
         });
 
-        // 3. Actualizar UI (Leemos los datos del jugador)
-        this.actualizarInterfaz();
+        // 2. Loot Inicial
+        for(let i=0; i < 8; i++) {
+            const x = Phaser.Math.Between(200, 2800);
+            // ALTURA CORREGIDA: 250 (Para que caigan al suelo)
+            this.spawnPickup(x, 250);
+        }
     }
 
-    // --- FUNCIONES AUXILIARES DE ESCENA ---
+    spawnPickup(x, y) {
+         const tipo = Phaser.Math.Between(0, 1) === 0 ? 'ammo' : 'health';
+         const item = new Pickup(this, x, y, tipo);
+         this.pickups.add(item);
+    }
 
     crearInterfaz() {
         this.barrasUI = this.add.graphics().setScrollFactor(0);
         
-        this.textoMunicion = this.add.text(12, 40, '', {
-            fontSize: '20px', fill: '#ffffff', fontFamily: 'Arial'
+        // FUENTE AJUSTADA A '10px' PORQUE LA PANTALLA ES PEQUEÑA
+        this.textoMunicion = this.add.text(10, 10, '', {
+            fontSize: '10px', 
+            fill: '#ffffff', 
+            fontFamily: 'Arial',
+            resolution: 2 // Para que el texto se vea nítido
         }).setScrollFactor(0);
 
-        this.textoVida = this.add.text(12, 70, '', {
-            fontSize: '20px', fill: '#ff0000', fontFamily: 'Arial', fontStyle: 'bold'
+        this.textoVida = this.add.text(10, 25, '', {
+            fontSize: '10px', 
+            fill: '#ff0000', 
+            fontFamily: 'Arial', 
+            fontStyle: 'bold',
+            resolution: 2
         }).setScrollFactor(0);
     }
 
     actualizarInterfaz() {
-        // Leemos las propiedades públicas del jugador
         const j = this.jugador; 
-
-        // Barra Stamina
         this.barrasUI.clear();
+        
+        // Barra Stamina (Más pequeña)
         this.barrasUI.fillStyle(0x000000);
-        this.barrasUI.fillRect(10, 10, 200, 20);
+        this.barrasUI.fillRect(10, 40, 100, 5); // Fondo
         
         const porcentaje = Math.max(0, j.stamina / j.maxStamina);
         const color = porcentaje > 0.3 ? 0x00ff00 : 0xff0000;
         this.barrasUI.fillStyle(color);
-        this.barrasUI.fillRect(12, 12, 196 * porcentaje, 16);
+        this.barrasUI.fillRect(10, 40, 100 * porcentaje, 5); // Barra
 
-        // Textos
         this.textoMunicion.setText(`BALAS: ${j.municionActual} / ${j.municionMax}`);
         this.textoVida.setText(`VIDA: ${j.vidaActual}`);
     }
 
-    spawnEnemigo() {
-        // 1. Elegir un lado de la pantalla aleatorio (Izquierda o Derecha)
-        // El jugador está en this.jugador.x
-        // Queremos que aparezcan fuera de cámara, p.ej. a 500px de distancia
-        
-        const distanciaSpawn = 300;
-        const direccion = Phaser.Math.Between(0, 1) === 0 ? 1 : -1;
-        const x = this.jugador.x + (distanciaSpawn * direccion);
-        
-        // Altura (asumiendo suelo plano en y=450, ajusta a tus plataformas)
-        const y = 450; 
-        
-        // Crear enemigo
-        const enemigo = new Enemigo(this, x, y);
-        this.enemigos.add(enemigo); // Agregarlo al grupo físico
-    }
-
-    // Crear el item (lo llama el enemigo al morir)
-    spawnPickup(x, y) {
-        // Importa la clase Pickup arriba: import { Pickup } from '../entidades/Pickup';
-        
-        // 50% vida, 50% munición
-        const tipo = Phaser.Math.Between(0, 1) === 0 ? 'ammo' : 'health';
-        
-        // Nota: Asegúrate de importar Pickup al inicio del archivo
-        const item = new Pickup(this, x, y, tipo);
-        this.pickups.add(item);
-    }
-
-    // Lógica al recoger
-    // GameScene.js
-
     recogerPickup(jugador, pickup) {
-        
-        if (pickup.tipo === 'ammo') {
-            // Llamamos al método del jugador que activa animación + bloqueo
-            // Le pasamos 10 balas (o las que quieras)
-            jugador.recogerMunicion(10);
-            
-        } else if (pickup.tipo === 'health') {
-            // Llamamos al método de curación
-            jugador.recogerVida(1);
-        }
-
-        // Destruimos el objeto del suelo inmediatamente
-        pickup.destroy();
-        
-        // UI se actualiza en el update(), así que no hay problema
+         if (pickup.tipo === 'ammo') jugador.recogerMunicion(10);
+         else if (pickup.tipo === 'health') jugador.recogerVida(1);
+         pickup.destroy();
     }
 
     crearAnimaciones() {

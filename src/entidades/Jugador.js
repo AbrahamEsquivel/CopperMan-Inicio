@@ -230,7 +230,7 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         this.anims.play('heal', true);
         
         // Feedback visual extra (opcional)
-        this.setTint(0x00ff00); 
+        //this.setTint(0x00ff00); 
 
         // Lógica matemática: Sumamos vida
         this.vidaActual = Math.min(this.vidaActual + cantidad, this.vidaMax);

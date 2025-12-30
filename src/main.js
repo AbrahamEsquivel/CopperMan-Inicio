@@ -4,19 +4,17 @@ import { GameScene } from './scenes/GameScene';
 
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'app',
+    width: 576,
+    height: 324,
+    zoom: 2,
+    pixelArt: true,
+
     physics: {
         default: 'arcade',
         arcade: {
             gravity: { y: 600 },
             debug: false
         }
-    },
-    scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH
     },
     scene: [GameScene]
 };
