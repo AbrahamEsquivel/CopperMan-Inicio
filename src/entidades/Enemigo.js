@@ -63,11 +63,20 @@ export class Enemigo extends Phaser.Physics.Arcade.Sprite {
     }
 
     morir() {
+        if (this.isDead) return; // Evitar que muera dos veces
+
         this.isDead = true;
-        this.body.enable = false; // Desactivar física
-        this.setTint(0xffffff);   // Quitar color rojo al morir
+        this.body.enable = false; 
+        this.setTint(0xffffff);
         this.anims.play('dead', true);
         
+        // --- SISTEMA DE LOOT ---
+        // 30% de probabilidad de soltar algo
+        if (Phaser.Math.Between(1, 100) <= 30) {
+            this.scene.spawnPickup(this.x, this.y);
+        }
+        // -----------------------
+
         this.on('animationcomplete-dead', () => {
             this.destroy();
         });

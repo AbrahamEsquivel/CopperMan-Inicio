@@ -2,16 +2,38 @@ import Phaser from 'phaser';
 import { Jugador } from '../entidades/Jugador';
 import { Enemigo } from '../entidades/Enemigo';
 import { Bala } from '../entidades/Bala';
+import { Pickup } from '../entidades/Pickup';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'Game' });
     }
 
+    // GameScene.js
+
     preload() {
         this.load.atlas('soldado', 'assets/soldado.png', 'assets/soldado.json');
         
-        // Textura Bala
+        // --- 1. Generar Textura de BOTIQUÍN (Cruz Roja) ---
+        const graphicsVida = this.make.graphics({ x: 0, y: 0, add: false });
+        graphicsVida.fillStyle(0xffffff); // Fondo blanco
+        graphicsVida.fillRect(0, 0, 32, 32);
+        graphicsVida.fillStyle(0xff0000); // Cruz roja
+        graphicsVida.fillRect(12, 4, 8, 24); // Vertical
+        graphicsVida.fillRect(4, 12, 24, 8); // Horizontal
+        graphicsVida.generateTexture('icono_vida', 32, 32); // <--- ID: 'icono_vida'
+
+        // --- 2. Generar Textura de MUNICIÓN (Caja Verde Militar) ---
+        const graphicsAmmo = this.make.graphics({ x: 0, y: 0, add: false });
+        graphicsAmmo.fillStyle(0x2d5a27); // Verde oscuro
+        graphicsAmmo.fillRect(0, 0, 32, 32);
+        graphicsAmmo.fillStyle(0xffff00); // Detalle amarillo (balas)
+        graphicsAmmo.fillRect(5, 10, 5, 15);
+        graphicsAmmo.fillRect(13, 10, 5, 15);
+        graphicsAmmo.fillRect(21, 10, 5, 15);
+        graphicsAmmo.generateTexture('icono_municion', 32, 32); // <--- ID: 'icono_municion'
+
+        // Textura Bala (que ya tenías)
         let graphics = this.make.graphics({x: 0, y: 0, add: false});
         graphics.fillStyle(0xffff00, 1);
         graphics.fillRect(0, 0, 10, 4);
@@ -41,6 +63,8 @@ export class GameScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, 2000, 600);
         this.cameras.main.setBounds(0, 0, 2000, 600);
 
+        // pickups (se crean después de plataformas/jugador)
+
         // Fondo
         if (this.textures.exists('sky')) {
             this.add.image(400, 300, 'sky').setScrollFactor(0); // Fondo fijo o parallax simple
@@ -64,6 +88,13 @@ export class GameScene extends Phaser.Scene {
         this.jugador = new Jugador(this, 100, 450);
         this.cameras.main.startFollow(this.jugador);
         this.physics.add.collider(this.jugador, this.plataformas);
+
+        // --- PICKUPS ---
+        this.pickups = this.physics.add.group();
+        this.physics.add.collider(this.pickups, this.plataformas);
+        this.physics.add.overlap(this.jugador, this.pickups, (jugador, pickup) => {
+            this.recogerPickup(jugador, pickup);
+        });
 
         // Controles
         this.teclas = this.input.keyboard.addKeys({
@@ -181,7 +212,7 @@ export class GameScene extends Phaser.Scene {
         // El jugador está en this.jugador.x
         // Queremos que aparezcan fuera de cámara, p.ej. a 500px de distancia
         
-        const distanciaSpawn = 500;
+        const distanciaSpawn = 300;
         const direccion = Phaser.Math.Between(0, 1) === 0 ? 1 : -1;
         const x = this.jugador.x + (distanciaSpawn * direccion);
         
@@ -193,6 +224,39 @@ export class GameScene extends Phaser.Scene {
         this.enemigos.add(enemigo); // Agregarlo al grupo físico
     }
 
+    // Crear el item (lo llama el enemigo al morir)
+    spawnPickup(x, y) {
+        // Importa la clase Pickup arriba: import { Pickup } from '../entidades/Pickup';
+        
+        // 50% vida, 50% munición
+        const tipo = Phaser.Math.Between(0, 1) === 0 ? 'ammo' : 'health';
+        
+        // Nota: Asegúrate de importar Pickup al inicio del archivo
+        const item = new Pickup(this, x, y, tipo);
+        this.pickups.add(item);
+    }
+
+    // Lógica al recoger
+    // GameScene.js
+
+    recogerPickup(jugador, pickup) {
+        
+        if (pickup.tipo === 'ammo') {
+            // Llamamos al método del jugador que activa animación + bloqueo
+            // Le pasamos 10 balas (o las que quieras)
+            jugador.recogerMunicion(10);
+            
+        } else if (pickup.tipo === 'health') {
+            // Llamamos al método de curación
+            jugador.recogerVida(1);
+        }
+
+        // Destruimos el objeto del suelo inmediatamente
+        pickup.destroy();
+        
+        // UI se actualiza en el update(), así que no hay problema
+    }
+
     crearAnimaciones() {
         // (Aquí pegas todas tus animaciones: walk, run, idle, shoot, reload, dead)
         // Como son globales para el 'soldado', está bien dejarlas en la escena o moverlas a un bootloader.
@@ -202,5 +266,6 @@ export class GameScene extends Phaser.Scene {
         this.anims.create({ key: 'shoot', frames: this.anims.generateFrameNames('soldado', { prefix: 'disparar', start: 1, end: 4, zeroPad: 0 }), frameRate: 20, repeat: 0 });
         this.anims.create({ key: 'reload', frames: this.anims.generateFrameNames('soldado', { prefix: 'recargar', start: 1, end: 7, zeroPad: 0 }), frameRate: 10, repeat: 0 });
         this.anims.create({ key: 'dead', frames: this.anims.generateFrameNames('soldado', { prefix: 'muerte', start: 1, end: 4, zeroPad: 0 }), frameRate: 10, repeat: 0 });
+        this.anims.create({ key: 'heal', frames: this.anims.generateFrameNames('soldado', { prefix: 'curar', start: 1, end: 12, zeroPad: 0 }), frameRate: 10, repeat: 0 });
     }
 }

@@ -31,6 +31,7 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         this.isReloading = false;
         this.isShooting = false;
         this.esInvulnerable = false;
+        this.isHealing = false;
 
         // Referencia a las teclas (las pasaremos desde la escena)
         this.teclas = null;
@@ -40,15 +41,25 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
 
     // Manejar fin de animaciones relevantes
     initAnimationHandlers() {
-        this.on('animationcomplete-shoot', () => {
-            this.isShooting = false;
-        });
+    // Disparo (ya lo tenías)
+    this.on('animationcomplete-shoot', () => {
+        this.isShooting = false;
+    });
 
-        this.on('animationcomplete-reload', () => {
-            this.municionActual = this.municionMax;
-            this.isReloading = false;
-        });
-    }
+    // Recarga (Munición)
+    this.on('animationcomplete-reload', () => {
+        // Al terminar la animación, ya puede volver a disparar
+        this.isReloading = false;
+        // NOTA: La munición la sumaremos al *iniciar* o al *finalizar*, 
+        // depende de tu gusto. Aquí aseguramos que se desbloquee.
+    });
+
+    // Curación (Vida) - NUEVO
+    this.on('animationcomplete-heal', () => {
+        this.isHealing = false; // Desbloquear al jugador
+        this.clearTint(); // Quitar color verde si lo pusimos
+    });
+}
 
     // Método para asignar controles
     asignarControles(teclas) {
@@ -110,7 +121,7 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
 
     gestionarAnimaciones() {
         // Prioridades
-        if (this.isReloading || this.isShooting) return;
+        if (this.isReloading || this.isShooting || this.isHealing || this.municionActual <= 0) return;
 
         if (!this.body.touching.down) {
             // No animamos salto porque no tienes los frames, pero aquí iría
@@ -195,5 +206,33 @@ export class Jugador extends Phaser.Physics.Arcade.Sprite {
         }
         
         // bala ya fue activada arriba (fire) o gestionada en el fallback
+    }
+
+    recogerMunicion(cantidad) {
+        // Si ya está lleno o ocupado, ignorar (o puedes dejar que agarre igual)
+        if (this.isReloading || this.isHealing || this.isShooting) return;
+        if (this.municionActual >= this.municionMax) return;
+
+        // Bloquear acciones
+        this.isReloading = true;
+        this.anims.play('reload', true);
+
+        // Lógica matemática: Sumamos balas (sin pasar el máximo)
+        this.municionActual = Math.min(this.municionActual + cantidad, this.municionMax);
+    }
+
+    recogerVida(cantidad) {
+        if (this.isReloading || this.isHealing || this.isShooting) return;
+        if (this.vidaActual >= this.vidaMax) return;
+
+        // Bloquear acciones
+        this.isHealing = true;
+        this.anims.play('heal', true);
+        
+        // Feedback visual extra (opcional)
+        this.setTint(0x00ff00); 
+
+        // Lógica matemática: Sumamos vida
+        this.vidaActual = Math.min(this.vidaActual + cantidad, this.vidaMax);
     }
 }
